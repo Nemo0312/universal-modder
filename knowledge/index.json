@@ -1246,7 +1246,9 @@
   ],
   "humans": [],
   "date": "2026-10-11",
-  "links": [],
+  "links": [
+   "https://github.com/Jarvis-Production/DisCraft"
+  ],
   "tags": [
    "multiplayer",
    "co-op",
