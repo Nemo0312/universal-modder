@@ -14,7 +14,7 @@ agents:
 - Claude Code (Opus 5.5)
 humans: []
 date: '2026-10-11'
-links: []
+links: ['https://github.com/Jarvis-Production/DisCraft']
 tags: [multiplayer, co-op, ue3, reflection, processevent, proton, two-instances, puppet, udp]
 ---
 # Ghost co-op for Dishonored (2012): UE3 reflection, PostRender hook, UDP puppet
@@ -45,21 +45,30 @@ tags: [multiplayer, co-op, ue3, reflection, processevent, proton, two-instances,
   - From Steam, set it as the launch option.
   - Our scripts run `proton run` directly with `SteamAppId=205100`. Steam must be running; ownership is
     checked normally.
+- **Co-op scope.** Each player runs their own copy of Dishonored. The link is the DLL's own UDP over a direct
+  connection (localhost here; between two PCs, a LAN or VPN address), not Steam networking or any Bethesda
+  service. The one-PC setup below runs the same install twice, for testing.
 
 ## Route and why
 - **UPK/UnrealScript edits: rejected.**
   - Packages are cooked and compressed (`PKG_StoreCompressed`).
   - Editing them breaks "never modify game files".
   - Worse, **UE3's netcode is stripped**: `IpDrv.upk` is a 1.6 KB stub, and the exe has no
-    `TcpNetDriver`/`IpNetDriver` strings. Replication can't be switched back on.
+    `TcpNetDriver`/`IpNetDriver` strings. We found nothing to switch replication back on with.
 - **External memory-reading sidecar: rejected.** It can't call engine functions safely. On Linux,
   `ptrace_scope=1` plus Proton reparenting the game to `systemd --user` blocks `/proc/<pid>/mem` from a
   non-root shell anyway.
 - **Chosen: an in-process native DLL.** It does SDK-free UE3 reflection, swaps a `UFunction::Func` for a
   game-thread tick, calls ProcessEvent, and runs its own UDP layer.
-  - Idea credit: DisCraft (Jarvis-Production, MIT) describes content-based GNames/GObjects discovery.
+  - Idea credit: [DisCraft](https://github.com/Jarvis-Production/DisCraft) (Jarvis-Production, MIT), a
+    Minecraft-in-Dishonored passthrough, describes content-based GNames/GObjects discovery in `docs/DESIGN.md`.
+    Its README says it was written without the game and hadn't been run in real Dishonored yet.
   - Our implementation is independent, and several of DisCraft's documented assumptions turned out wrong for
     this build (see Gotchas).
+- **Related:** `knowledge/games/assassin-s-creed-iv-black-flag/coop-ghost-avatar.md` is the same idea in AC4
+  (a puppet body moved by transform writes from the plugin's own UDP link), and
+  `knowledge/techniques/bridge-contracts-ownership-units-and-lifecycle.md` covers ownership and link
+  lifecycle for when world state starts crossing.
 
 ## How the game works (what we had to learn)
 **Globals for this build** (we find them by content at runtime; the addresses are for debuggers):
@@ -174,7 +183,8 @@ assigns `Func` only when the class links, so a watchdog re-applies the swap.
 9. **Symptom:** synthetic input can't dismiss "press any key". **Cause:** these never reach the game:
    posted WM_KEYDOWN, faked GetFocus/GetForegroundWindow/GetActiveWindow, a GetKeyState hook, DirectInput
    state/buffer injection and `SendInput` without real focus. **Fix:** `xdotool windowactivate` + key/click for
-   menus. For gameplay, write PlayerInput axes from the hook.
+   menus. That drives the real desktop, so ask the human first and don't do it while they're typing. For
+   gameplay, write PlayerInput axes from the hook.
 10. **Symptom:** a copy hangs permanently (main thread stuck in `PeekMessageW`/win32u or inside system dinput8;
     winedbg backtrace). **Cause:** not proven. Both times followed `xdotool windowactivate` + synthetic keys
     while two copies were running (once while we patched DirectInput vtables). **Fix:** keep desktop input to the
